@@ -62,9 +62,35 @@ namespace ctrsdktest
             JDQ_2_Start,
             JDQ_2_Stop
         }
+        enum FearureAlgMode
+        {
+            IPCA = 0,
+            Destribute
+        }
 
+        enum CheckStatus
+        {
+            Normal = 0,
+            Notice,
+            Warning,
+            Error
+        }
+
+        private string cc = "0.1A";
+        private string level = "2";
         private int waitingTime = 5;
         private string speed = "100";
+        private string globalId;
+        private string startCheckTime;
+        private static string _snapPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Capture");
+        private static string _IPCABackPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"IPCA");
+        private static string _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"Log");
+        private static string _IPCABackF = "IPCABack_F.jpg";
+        private static string _IPCABackT = "IPCABack_T.jpg";
+        public string _IPCA_BackFileT = Path.Combine(_IPCABackPath, _IPCABackT);
+        public string _IPCA_BackFileF = Path.Combine(_IPCABackPath, _IPCABackF);
+
+
         private bool isRecieveAsStr = false;
         static SerialPort _commHelper = new SerialPort();
         static CTRSdk sdk = new CTRSdk();
@@ -97,7 +123,7 @@ namespace ctrsdktest
         private void addLog(string log)
         {
             string msg = string.Format("[{0} {1}] : {2}", "Info", DateTime.Now.ToString(), log);
-            listBox1.Items.Add(msg);
+            displayHScroll(msg);
             listBox1.SelectedIndex = listBox1.Items.Count - 1;
         }
         private void button1_Click(object sender, EventArgs e)
@@ -290,228 +316,524 @@ namespace ctrsdktest
                 MessageBox.Show("串口未打开失败");
             }
         }
+
+        private void resetLatestCmd()
+        {
+            sdk.resetLatestCmd();
+            _timeOutTimes = 0;
+            _latestCmdRecieve = true;
+            s_Timer.Stop();
+        }
+
+        private void finishedSelfCheck()
+        {
+            /*
+             * 加载检测参数 放在开始检测
+             */
+            button1.Enabled = true;
+            updateStatusText("已就绪");
+        }
+        private void StartProcessWithB()
+        {
+            //开启泵
+            startCheckTime = DateTime.Now.ToLocalTime().ToString();
+            globalId = utilCommon.GetGUIDByTime();
+
+            updateStatusCheckTimes(1);
+            //开启泵
+            _stepHighestPercentage = 0;
+            _highestPercentageReached = 19;
+            backgroundWorker1.RunWorkerAsync();
+            updateStatusText(utilCommon.B_starting);
+
+            s_Timer.Stop();
+            sdk.sendBengStartCmd();
+            s_Timer.Start();
+        }
+        private void ErrStop(string msg)
+        {
+            addLog(msg);
+            button33.PerformClick();
+            MessageBox.Show(msg, "温馨提示", 0, MessageBoxIcon.Information, 0);
+        }
+        private void StartCapture(bool isFType)
+        {
+            updateStatusText(utilCommon.startCapture);
+            string picName = globalId;
+            if (picName.Equals(""))
+            {
+                ErrStop("检测序列号异常，检测终止");
+                return;
+            }
+            picName = isFType ? picName + "_F.jpg" : picName + "_T.jpg";
+            string snapPath = Path.Combine(_snapPath, picName);
+            if (!snapCam(snapPath))
+            {
+                ErrStop("采集图像失败，检测终止");
+                return;
+            }
+        }
+        /*
+        * 执行检测前冲刷时间
+        */
+        void ExcuteBeforeCheckTime()
+        {
+            addLog("正在执行检测前冲刷，时间：" + waitingTime + "秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+
+                updateStatusText(utilCommon.JC_ing);
+                s_Timer.Stop();
+                sdk.sendStartJCCmd(cc);
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(waitingTime);
+        }
+        void ExcuteMLCJTime()
+        {
+            addLog("正在执行磨粒沉积时间，时间：" + waitingTime + "秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+                //停泵
+                updateStatusText(utilCommon.B_stoping);
+                s_Timer.Stop();
+                sdk.sendStopBCmd();
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(waitingTime);
+        }
+        private void ExcutePictureTime()
+        {
+            //拍照
+            addLog("正在采集照片（反射光），时间：5秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+                StartCapture(true);
+                updateStatusText(utilCommon.B_closeLED1ing);
+
+                s_Timer.Stop();
+                sdk.sendStoppointLED1Cmd();
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(waitingTime); //等待三秒
+        }
+        private void ExcuteReDelJC()
+        {
+            addLog("正在重复消磁，时间：" + "5秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                //for (int i = 1; i <= time; ++i)
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                updateStatusText(utilCommon.B_starting);
+
+                s_Timer.Stop();
+                sdk.sendBengStartCmdAgain();
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(5);
+        }
+        private void ExcuteLED2DelayTime()
+        {
+            addLog("正在执行透射光延迟时间，时间：" + waitingTime + "秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                //for (int i = 1; i <= time; ++i)
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+                updateStatusText(utilCommon.B_closeLED2ing);
+
+                s_Timer.Stop();
+                sdk.sendStoppointLED2Cmd();
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(waitingTime);
+        }
+        private void ExcuteLED2PrepareTime()
+        {
+            addLog("正在采集照片（透射光），时间：" + waitingTime + "秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+                StartCapture(false);
+                ExcuteLED2DelayTime();
+            });
+            worker.RunWorkerAsync(waitingTime);
+        }
+        private void ExcuteAfterCheckTime()
+        {
+            addLog("正在执行检测后冲刷，时间：" + waitingTime + "秒");
+            BackgroundWorker worker = new BackgroundWorker();
+            worker.DoWork += new DoWorkEventHandler((s, arg) =>
+            {
+                int time = (int)arg.Argument;
+                //for (int i = 1; i <= time; ++i)
+                for (int i = time; i > 0; i--)
+                {
+                    if (s_isStop)
+                    {
+                        updateStatusText(utilCommon.STOP_CHECKING);
+                        return;
+                    }
+                    this.toolStripStatusLabel1.Text = String.Format("---{0}---", i.ToString());
+                    Thread.Sleep(1000);
+                }
+                if (s_isStop)
+                {
+                    updateStatusText(utilCommon.STOP_CHECKING);
+                    return;
+                }
+                _stepHighestPercentage++;
+                updateStatusText(utilCommon.B_stoping);
+
+                s_Timer.Stop();
+                sdk.sendStopBCmdAgain();
+                s_Timer.Start();
+            });
+            worker.RunWorkerAsync(waitingTime);
+        }
         private void processRecieve(string data)
         {
-            //if (_isHaveTempData)
-            //{
-            //    data = _haveTempData + data;
-            //}
-            //int pos = data.IndexOf(getLatestCmdReturn());
-            //if (pos != -1)
-            //{
-            //    _isHaveTempData = false;
-            //    _haveTempData = "";
-            //    data = getLatestCmdReturn();
-            //}
-            //else
-            //{
-            //    _isHaveTempData = true;
-            //    _haveTempData = data;
-            //    addLog("收到数据：" + data);
-            //    if (_haveTempData.Length > 200)
-            //    {
-            //        _haveTempData = "";
-            //        addLog("临时缓存超过200字节，已自动清理");
-            //    }
-            //    return;
-            //}
-            //data = data.Replace(" ", "");//16 进制按照字符串处理
-            //addLog("收到数据：" + data);
-            //switch (_latestCmd.type)
-            //{
-            //    case cmd_Type.boardSelfCheck:
-            //        if (data.Equals(CMDComm.CMD_SELFCHECK_RETURN))
-            //        {
-            //            addLog("检测仪自检状态：" + utilCommon.selfCheck_ZC);
-            //            resetLatestCmd();
-            //            finishedSelfCheck();
-            //        }
-            //        break;
-            //    case cmd_Type.B_setSpeed:
-            //        if (data.Equals(CMDComm.CMD_BENGSPEED_RETURN))
-            //        {
-            //            addLog(utilCommon.B_setSpeed_SUCC);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_setSpeed_SUCC);
-            //            //泵： 1 单向阀： 2
-            //            StartProcessWithB();
-            //        }
-            //        break;
-            //    case cmd_Type.B_start:
-            //        if (data.Equals(CMDComm.CMD_STARTBENG_RETURN))
-            //        {
-            //            addLog("泵已启动");
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_started);
-            //            _stepHighestPercentage++;
-            //            updateStatusText(utilCommon.B_openLED1ing);
-            //            StartPointLightLED1();
-            //        }
-            //        break;
-            //    case cmd_Type.B_LED1:
-            //        if (data.Equals(CMDComm.CMD_START_POINTLIGHT_RETURN))
-            //        {
-            //            addLog(utilCommon.B_openLED1ed);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_openLED1ed);
-            //            _stepHighestPercentage++;
-            //            ExcuteBeforeCheckTime();
-            //        }
-            //        break;
-            //    case cmd_Type.B_LED1_s://再次开启反射光源后，停磁
-            //        if (data.Equals(CMDComm.CMD_START_POINTLIGHT_RETURN))
-            //        {
-            //            addLog(utilCommon.B_openLED1ed);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_openLED1ed);
-            //            _stepHighestPercentage++;
-            //            updateStatusText(utilCommon.JC_stop_ing);
-            //            StopJC();
-            //        }
-            //        break;
-            //    case cmd_Type.B_LED2: //透射灯开启，执行透射等准备时间
-            //        if (data.Equals(CMDComm.CMD_START_AREALIGHT_RETURN))
-            //        {
-            //            addLog(utilCommon.B_openLED2ed);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_openLED2ed);
-            //            _stepHighestPercentage++;
-            //            ExcuteLED2PrepareTime();
-            //        }
-            //        break;
-            //    case cmd_Type.JC_Start:
-            //        if (data.Equals(CMDComm.CMD_PWM_ADD_RETURN))
-            //        {
-            //            addLog(utilCommon.JC_finished);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.JC_finished);
-            //            _stepHighestPercentage++;
-            //            ExcuteMLCJTime();
-            //        }
-            //        break;
-            //    case cmd_Type.B_stop:
-            //        if (data.Equals(CMDComm.CMD_STOPBENG_RETURN))
-            //        {
-            //            addLog(utilCommon.B_stop);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_stop);
-            //            _stepHighestPercentage++;
-            //            ExcutePictureTime();
-            //        }
-            //        break;
-            //    case cmd_Type.JC_Stop:
-            //        if (data.Equals(CMDComm.CMD_PWM_STOP_RETURN))
-            //        {
-            //            addLog(utilCommon.JC_stop_finished);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.JC_stop_finished);
-            //            _stepHighestPercentage++;
-            //            updateStatusText(utilCommon.JC_del_ing);
-            //            DelJC();
-            //        }
-            //        break;
-            //    case cmd_Type.JC_Des:
-            //        if (data.Equals(CMDComm.CMD_PWM_DEL_RETURN))
-            //        {
-            //            addLog(utilCommon.JC_del_finished);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.JC_del_finished);
-            //            _stepHighestPercentage++;
-            //            ExcuteReDelJC();
-            //        }
-            //        break;
-            //    case cmd_Type.B_LED1_stop: //反射灯关闭，开启投射灯
-            //        if (data.Equals(CMDComm.CMD_STOP_POINTLIGHT_RETURN))
-            //        {
-            //            addLog(utilCommon.B_closeLED1ed);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_closeLED1ed);
-            //            _stepHighestPercentage++;
-            //            updateStatusText(utilCommon.B_openLED2ing);
-            //            StartPointLightLED2();
-            //        }
-            //        break;
-            //    case cmd_Type.B_LED2_stop://透射灯关闭，开启反射灯
-            //        if (data.Equals(CMDComm.CMD_STOP_AREALIGHT_RETURN))
-            //        {
-            //            addLog(utilCommon.B_closeLED2ed);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_closeLED2ed);
-            //            _stepHighestPercentage++;
-            //            if (_isGetIPCABack)
-            //            {
-            //                finishedGetIPCABack();
-            //                return;
-            //            }
-            //            updateStatusText(utilCommon.B_openLED1ing);
-            //            StartPointLightLED1Again();
-            //        }
-            //        break;
-            //    case cmd_Type.B_start_s:
-            //        if (data.Equals(CMDComm.CMD_STARTBENG_RETURN))
-            //        {
-            //            addLog(utilCommon.B_started);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_started);
-            //            _stepHighestPercentage++;
-            //            ExcuteAfterCheckTime();
-            //        }
-            //        break;
-            //    case cmd_Type.B_stop_s:
-            //        if (data.Equals(CMDComm.CMD_STOPBENG_RETURN))
-            //        {
-            //            addLog(utilCommon.B_stop);
-            //            resetLatestCmd();
-            //            updateStatusText(utilCommon.B_stop);
-            //            _stepHighestPercentage++;
-            //            InvestigateResult();
-            //        }
-            //        break;
-            //    case cmd_Type.GREEN_Keep:
-            //        if (data.Equals(CMDComm.CMD_GREENLIGHT_KEEP_RETURN))
-            //        {
-            //            addLog(utilCommon.GREEN_KEEP);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    case cmd_Type.GREEN_NoKeep:
-            //        if (data.Equals(CMDComm.CMD_GREENLIGHT_NOKEEP_RETURN))
-            //        {
-            //            addLog(utilCommon.GREEN_NOKEEP);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    case cmd_Type.GREEN_Close:
-            //        if (data.Equals(CMDComm.CMD_GREENLIGHT_CLOSE_RETURN))
-            //        {
-            //            addLog(utilCommon.GREEN_CLOSE);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    case cmd_Type.RED_Keep:
-            //        if (data.Equals(CMDComm.CMD_REDLIGHT_KEEP_RETURN))
-            //        {
-            //            addLog(utilCommon.RED_KEEP);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    case cmd_Type.RED_NoKeep:
-            //        if (data.Equals(CMDComm.CMD_REDLIGHT_NOKEEP_RETURN))
-            //        {
-            //            addLog(utilCommon.RED_NOKEEP);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    case cmd_Type.RED_Close:
-            //        if (data.Equals(CMDComm.CMD_REDLIGHT_CLOSE_RETURN))
-            //        {
-            //            addLog(utilCommon.RED_CLOSE);
-            //            resetLatestCmd();
-            //        }
-            //        break;
-            //    default:
-            //        break;
-            //}
+            if (_isHaveTempData)
+            {
+                data = _haveTempData + data;
+            }
+            int pos = data.IndexOf(sdk.getLatestCmdReturn());
+            if (pos != -1)
+            {
+                _isHaveTempData = false;
+                _haveTempData = "";
+                data = sdk.getLatestCmdReturn();
+            }
+            else
+            {
+                _isHaveTempData = true;
+                _haveTempData = data;
+                addLog("收到数据：" + data);
+                if (_haveTempData.Length > 200)
+                {
+                    _haveTempData = "";
+                    addLog("临时缓存超过200字节，已自动清理");
+                }
+                return;
+            }
+            data = data.Replace(" ", "");//16 进制按照字符串处理
+            addLog("收到数据：" + data);
+
+            cmd_Type type = (cmd_Type)sdk.getLatestCmdType();
+            string cmdReturn = sdk.getCmdReturn((int)type);
+            switch (type)
+            {
+                case cmd_Type.boardSelfCheck:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog("检测仪自检状态：" + utilCommon.selfCheck_ZC);
+                        resetLatestCmd();
+                        finishedSelfCheck();
+                    }
+                    break;
+                case cmd_Type.B_setSpeed:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_setSpeed_SUCC);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_setSpeed_SUCC);
+                        //泵： 1 单向阀： 2
+                        StartProcessWithB();
+                    }
+                    break;
+                case cmd_Type.B_start:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog("泵已启动");
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_started);
+                        _stepHighestPercentage++;
+                        updateStatusText(utilCommon.B_openLED1ing);
+
+                        s_Timer.Stop();
+                        sdk.sendStartLED1Cmd(level);
+                        s_Timer.Start();
+                    }
+                    break;
+                case cmd_Type.B_LED1:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_openLED1ed);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_openLED1ed);
+                        _stepHighestPercentage++;
+                        ExcuteBeforeCheckTime();
+                    }
+                    break;
+                case cmd_Type.B_LED1_s://再次开启反射光源后，停磁
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_openLED1ed);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_openLED1ed);
+                        _stepHighestPercentage++;
+                        updateStatusText(utilCommon.JC_stop_ing);
+
+                        s_Timer.Stop();
+                        sdk.sendStopJCCmd();
+                        s_Timer.Start();
+                    }
+                    break;
+                case cmd_Type.B_LED2: //透射灯开启，执行透射等准备时间
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_openLED2ed);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_openLED2ed);
+                        _stepHighestPercentage++;
+                        ExcuteLED2PrepareTime();
+                    }
+                    break;
+                case cmd_Type.JC_Start:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.JC_finished);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.JC_finished);
+                        _stepHighestPercentage++;
+                        ExcuteMLCJTime();
+                    }
+                    break;
+                case cmd_Type.B_stop:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_stop);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_stop);
+                        _stepHighestPercentage++;
+                        ExcutePictureTime();
+                    }
+                    break;
+                case cmd_Type.JC_Stop:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.JC_stop_finished);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.JC_stop_finished);
+                        _stepHighestPercentage++;
+                        updateStatusText(utilCommon.JC_del_ing);
+
+                        s_Timer.Stop();
+                        sdk.sendDelJCCmd();
+                        s_Timer.Start();
+                    }
+                    break;
+                case cmd_Type.JC_Des:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.JC_del_finished);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.JC_del_finished);
+                        _stepHighestPercentage++;
+                        ExcuteReDelJC();
+                    }
+                    break;
+                case cmd_Type.B_LED1_stop: //反射灯关闭，开启投射灯
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_closeLED1ed);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_closeLED1ed);
+                        _stepHighestPercentage++;
+                        updateStatusText(utilCommon.B_openLED2ing);
+
+                        s_Timer.Stop();
+                        sdk.sendStartLED2Cmd(level);
+                        s_Timer.Start();
+                    }
+                    break;
+                case cmd_Type.B_LED2_stop://透射灯关闭，开启反射灯
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_closeLED2ed);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_closeLED2ed);
+                        _stepHighestPercentage++;
+                        //if (_isGetIPCABack)
+                        //{
+                        //    finishedGetIPCABack();
+                        //    return;
+                        //}
+                        updateStatusText(utilCommon.B_openLED1ing);
+
+                        s_Timer.Stop();
+                        sdk.sendStartLED1CmdAgain(level);
+                        s_Timer.Start();
+                    }
+                    break;
+                case cmd_Type.B_start_s:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_started);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_started);
+                        _stepHighestPercentage++;
+                        ExcuteAfterCheckTime();
+                    }
+                    break;
+                case cmd_Type.B_stop_s:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.B_stop);
+                        resetLatestCmd();
+                        updateStatusText(utilCommon.B_stop);
+                        _stepHighestPercentage++;
+                        InvestigateResult();
+                    }
+                    break;
+                case cmd_Type.GREEN_Keep:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.GREEN_KEEP);
+                        resetLatestCmd();
+                    }
+                    break;
+                case cmd_Type.GREEN_NoKeep:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.GREEN_NOKEEP);
+                        resetLatestCmd();
+                    }
+                    break;
+                case cmd_Type.GREEN_Close:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.GREEN_CLOSE);
+                        resetLatestCmd();
+                    }
+                    break;
+                case cmd_Type.RED_Keep:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.RED_KEEP);
+                        resetLatestCmd();
+                    }
+                    break;
+                case cmd_Type.RED_NoKeep:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.RED_NOKEEP);
+                        resetLatestCmd();
+                    }
+                    break;
+                case cmd_Type.RED_Close:
+                    if (data.Equals(cmdReturn))
+                    {
+                        addLog(utilCommon.RED_CLOSE);
+                        resetLatestCmd();
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
         #endregion
 
@@ -950,35 +1272,6 @@ namespace ctrsdktest
             addLog("检测图像获取失败");
             return false;
         }
-        private void ForceCloseForm()
-        {
-            System.Environment.Exit(0);
-        }
-        private void CloseForm(object sender, FormClosingEventArgs e)
-        {
-            if (_camHelper != null && _camHelper.isRunning())
-            {
-                e.Cancel = true;
-                MessageBox.Show("为了设备安全使用，请先停止检测，再关闭应用程序", "关闭提示", 0, MessageBoxIcon.Information, 0);
-                return;
-            }
-            if (DialogResult.OK == MessageBox.Show("你确定要关闭应用程序吗？", "关闭提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Question))
-            {
-                if (_camHelper != null && _camHelper.isRunning())
-                {
-                    closeCam();
-                }
-                if (_commHelper.IsOpen)
-                {
-                    _commHelper.Close();
-                }
-            }
-            else
-            {
-                e.Cancel = true;
-            }
-        }
-
         delegate void timeMessageBoxShow(string msg, int count);
         public void asynTimeMessageShow(string msg, int count)
         {
@@ -1064,7 +1357,7 @@ namespace ctrsdktest
                     addLog(String.Format("开启反射光源超时，重新发送,第 {0} 次", _timeOutTimes));
 
                     s_Timer.Stop();
-                    sdk.sendStartLED1Cmd("4");
+                    sdk.sendStartLED1Cmd(level);
                     s_Timer.Start();
                     break;
                 case cmd_Type.B_LED1_s:
@@ -1079,7 +1372,7 @@ namespace ctrsdktest
                     addLog(String.Format("开启反射光源超时，重新发送,第 {0} 次", _timeOutTimes));
 
                     s_Timer.Stop();
-                    sdk.sendStartLED1CmdAgain("4");
+                    sdk.sendStartLED1CmdAgain(level);
                     s_Timer.Start();
                     break;
                 case cmd_Type.B_LED2:
@@ -1094,7 +1387,7 @@ namespace ctrsdktest
                     addLog(String.Format("开启透射光源超时，重新发送,第 {0} 次", _timeOutTimes));
 
                     s_Timer.Stop();
-                    sdk.sendStartLED2Cmd("4");
+                    sdk.sendStartLED2Cmd(level);
                     s_Timer.Start();
                     break;
                 case cmd_Type.JC_Start:
@@ -1109,7 +1402,7 @@ namespace ctrsdktest
                     addLog(String.Format("加磁超时，重新发送,第 {0} 次", _timeOutTimes));
 
                     s_Timer.Stop();
-                    sdk.sendStartJCCmd("0.4A");
+                    sdk.sendStartJCCmd(cc);
                     s_Timer.Start();
                     break;
                 case cmd_Type.B_stop:
@@ -1335,18 +1628,14 @@ namespace ctrsdktest
             else if (e.Cancelled)
             {
                 //添加用户手动取消的动作
-                this.toolStripProgressBar1.Value = 0;
             }
             //判断是否正常结束
             else
             {
-                this.toolStripProgressBar1.Value = 0;
             }
         }
         private void backgroundWorker1_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
-            //更新进度条进度值
-            this.toolStripProgressBar1.Value = e.ProgressPercentage;
         }
         /*
           * 执行等待耗时操作
@@ -1390,6 +1679,335 @@ namespace ctrsdktest
         private void button33_Click(object sender, EventArgs e)
         {
             stopChecking();
+        }
+        private void InvestigateResult()
+        {
+            addLog("正在分析结果");
+            updateStatusText("正在分析结果");
+
+            string picName = globalId;
+            if (picName.Equals(""))
+            {
+                ErrStop("检测序列号异常，检测终止");
+                return;
+            }
+            string snapPathBackT = Path.Combine(_IPCABackPath, _IPCABackT);
+            string snapPathBackF = Path.Combine(_IPCABackPath, _IPCABackF);
+
+            if (!File.Exists(snapPathBackT) || !File.Exists(snapPathBackF))
+            {
+                ErrStop("磨粒背景图片异常，检测终止");
+                return;
+            }
+
+            string picNameF = picName + "_F.jpg";
+            string snapPathF = Path.Combine(_snapPath, picNameF);
+
+            if (!File.Exists(snapPathF))
+            {
+                ErrStop("采集的反射光图像异常，检测终止");
+                return;
+            }
+
+            string picNameT = picName + "_T.jpg";
+            string snapPathT = Path.Combine(_snapPath, picNameT);
+
+            if (!File.Exists(snapPathT))
+            {
+                ErrStop("采集的透射光图像异常，检测终止");
+                return;
+            }
+
+            DateTime startTime = Convert.ToDateTime(startCheckTime);
+            DateTime endTime = DateTime.Now.ToLocalTime();
+
+            int thisDiff = utilCommon.ExecDateDiffToInt(startTime, endTime);
+
+            if (DateTime.Compare(endTime, startTime) <= 0 || thisDiff <= 0)
+            {
+                addLog("注意：开始时间与结束时间间隔为 0");
+                thisDiff = 1;
+            }
+            
+
+            FileStream fsF = new FileStream(snapPathF, FileMode.Open);
+            byte[] bufferF = StreamUtil.ReadFully(fsF);
+            fsF.Close();
+
+            FileStream fsT = new FileStream(snapPathT, FileMode.Open);
+            byte[] bufferT = StreamUtil.ReadFully(fsT);
+            fsT.Close();
+
+            //获取到的灯光和边界情况
+            bool IPCALight = true;
+            bool IPCABorder = true;
+            bool DebrisLight = true;
+            bool DebrisBorder = true;
+            bool BackPicType = true;
+            /*
+             * 计算IPCA
+             */
+            int ferrIPCA = 0; //磨粒浓度指数
+            int[] DebrisSize = new int[3];
+            int[] DebrisArea = new int[3];
+            int[] intervalArea = new int[2];
+            intervalArea[0] = 15;
+            intervalArea[1] = 70;
+            bool calres = false;
+            string snapPath = string.Empty;
+            string snapPathBack = string.Empty;
+
+            if (BackPicType)
+            {
+                //透射光
+                snapPath = snapPathT;
+                snapPathBack = snapPathBackT;
+            }
+            else
+            {
+                //反射光
+                snapPath = snapPathF;
+                snapPathBack = snapPathBackF;
+            }
+            if (IPCALight) //透射光
+            {
+                calres = calculateTestResult(FearureAlgMode.IPCA, intervalArea, snapPathBack,
+                    snapPath, IPCALight, IPCABorder, ref DebrisSize, ref DebrisArea, ref ferrIPCA);
+            }
+            else //反射光
+            {
+                calres = calculateTestResult(FearureAlgMode.IPCA, intervalArea, snapPathBack,
+                    snapPath, IPCALight, IPCABorder, ref DebrisSize, ref DebrisArea, ref ferrIPCA);
+            }
+
+            addLog("本次检测IPCA值：" + ferrIPCA);
+            string IPCA = ferrIPCA.ToString();
+            string ND = ferrIPCA.ToString();
+            string NDTD = (ferrIPCA).ToString();
+
+            CheckStatus IPCAStatus = getIPCAResult(Convert.ToInt32(IPCA), Convert.ToInt32(NDTD),
+                40, 120, 10);
+            /*
+             * 计算磨粒数量
+             */
+            int tempIPCA = 0; //磨粒浓度指数
+            DebrisSize.Initialize();
+            DebrisArea.Initialize();
+
+            if (DebrisLight)
+            {
+                calres = calculateTestResult(FearureAlgMode.Destribute, intervalArea, snapPathBack,
+                    snapPath, DebrisLight, DebrisBorder, ref DebrisSize, ref DebrisArea, ref tempIPCA);
+            }
+            else
+            {
+                calres = calculateTestResult(FearureAlgMode.Destribute, intervalArea, snapPathBack,
+                    snapPath, DebrisLight, DebrisBorder, ref DebrisSize, ref DebrisArea, ref tempIPCA);
+            }
+
+            string DS1 = Convert.ToString(DebrisSize[0]);
+            string DS2 = Convert.ToString(DebrisSize[1]);
+            string DS3 = Convert.ToString(DebrisSize[2]);
+
+            CheckStatus debrisStatus = getDebrisResult(DebrisSize, 15,
+                70,40);
+
+            //取大值，严重的一个
+            string deviceStatus = "未知";
+            CheckStatus latestStatus = IPCAStatus > debrisStatus ? IPCAStatus : debrisStatus;
+            switch (latestStatus)
+            {
+                case CheckStatus.Normal:
+                    deviceStatus = utilCommon.checkResult_ZC;
+                    sdk.sendRedLightClose();
+                    break;
+                case CheckStatus.Notice:
+                    deviceStatus = utilCommon.checkResult_ZY;
+                    sdk.sendRedLightClose();
+                    break;
+                case CheckStatus.Warning:
+                    deviceStatus = utilCommon.checkResult_JJ;
+                    sdk.sendRedLightNOKeep();
+                    break;
+                case CheckStatus.Error:
+                    deviceStatus = utilCommon.checkResult_BJ;
+                    sdk.sendRedLightNOKeep();
+                    break;
+            }
+
+            string msg = String.Format("设备编号：{0},设备名称：{1},检测模式：{2},本次检测用时：" +
+                "{3}分钟,测试结果：{4} 详情请查阅日志",globalId, "测试设备", "A", thisDiff.ToString(), deviceStatus);
+            addLog(msg);
+            _stepHighestPercentage++;
+            addLog("本次检测已完成");
+            updateStatusText("本次检测已完成");
+            label13_result.Text = msg;
+            stopChecking();
+        }
+        /*透射光 lightModel ：1 ，反射光：0*/
+        bool calculateTestResult(FearureAlgMode model, int[] interval, string backImage, string resultImage,
+            bool lightModel, bool isBorder, ref int[] DebrisSize, ref int[] DebrisArea, ref int IPCA)
+        {
+            if (interval.Length == 0 ||
+                backImage.Equals("") || resultImage.Equals(""))
+            {
+                addLog("计算磨粒数量失败，原因：输入图片路径错误");
+                return false;
+            }
+            bool border = isBorder;
+            bool lightT = lightModel;
+            addLog(String.Format("本次计算：{0}，谱片灯光条件：{1}，边界情况：{2}", model, lightT, border));
+
+            //DebrisProcessing(bool light, bool border,double alpha, int[] sizelimi
+            //light—谱片灯光条件。透射光为true，反射光和全光源均为false。
+            //border—谱片边界条件。有边界为true，无边界为false。
+            //alpha—比例尺。一个像素的长度等于alpha微米。
+            //1 计算IPCA 2. 计算磨粒数量
+            if (model == FearureAlgMode.IPCA)
+            {
+                if (lightT)
+                {
+                    addLog("计算IPCA，采用透射光， 背景图片：" + backImage);
+                    addLog("计算IPCA，采用透射光， 目标图片:" + resultImage);
+                    addLog("计算IPCA，采用透射光， 详细参数:DebrisProcessing(true, true, 3.0, interval)");
+                }
+                else
+                {
+                    addLog("计算IPCA，采用反射光， 背景图片：" + backImage);
+                    addLog("计算IPCA，采用反射光， 目标图片:" + resultImage);
+                    addLog("计算IPCA，采用反射光， 详细参数:DebrisProcessing(false, true, 3.0, interval)");
+                }
+            }
+            else if (model == FearureAlgMode.Destribute)
+            {
+                if (lightT)
+                {
+                    addLog("计算磨粒数量，采用透射光， 背景图片：" + backImage);
+                    addLog("计算磨粒数量，采用透射光， 目标图片:" + resultImage);
+                    addLog("计算磨粒数量，采用透射光,  详细参数:DebrisProcessing(true, true, 3.0, interval)");
+                }
+                else
+                {
+                    addLog("计算磨粒数量，采用反射光， 背景图片：" + backImage);
+                    addLog("计算磨粒数量，采用反射光， 目标图片:" + resultImage);
+                    addLog("计算磨粒数量，采用反射光,  详细参数:DebrisProcessing(false, true, 3.0, interval)");
+                }
+            }
+
+            DebrisProcessing FG = new DebrisProcessing(lightT, border, 3.0, interval);//磨粒谱片处理初始化
+            Image<Bgr, byte> image = new Image<Bgr, byte>(backImage);
+            Image<Bgr, byte> image_backgroud = new Image<Bgr, byte>(resultImage);
+            int width = image.Width;
+            int height = image.Height;
+            Image<Bgr, byte> imagefore;
+            Image<Bgr, byte> imageback;
+            Image<Gray, byte> debris_binary;
+
+            FG.DebrisPretreatment(image, image_backgroud, out imagefore, out imageback);
+            debris_binary = FG.ferrogram_binary(imagefore, imageback);
+            if (model == FearureAlgMode.IPCA)
+            {
+                IPCA = FG.picIPCA(debris_binary);
+                addLog("计算磨粒数量 IPCA值:" + IPCA);
+                return true;
+            }
+            else if (model == FearureAlgMode.Destribute)
+            {
+                FG.sizeDistribution(image, debris_binary, out DebrisSize, out DebrisArea);
+                return true;
+            }
+            return false;
+        }
+
+        /*
+         * x: ipca
+         * y: 梯度
+         */
+        CheckStatus getIPCAResult(int x, int y, int p1, int p2, int t)
+        {
+            if (x == 0 || y == 0 ||
+                p1 == 0 || p2 == 0 || t == 0)
+            {
+                return CheckStatus.Normal;
+            }
+            if (x <= p1 && y <= t)
+            {
+                return CheckStatus.Normal;
+            }
+            if ((x > p1 && x <= p2 && y <= t) || (x < p1 && y > t))
+            {
+                return CheckStatus.Notice;
+            }
+            if ((x > p1 && x <= p2 && y > t) || (x > p2 && y <= t))
+            {
+                return CheckStatus.Warning;
+            }
+            if (x > p2 && y > t)
+            {
+                return CheckStatus.Error;
+            }
+            return CheckStatus.Normal;
+        }
+
+        CheckStatus getDebrisResult(int[] DebrisSize, int KS, int AS, int SNL)
+        {
+            if (AS == 0 || KS == 0 || DebrisSize.Length != 3)
+            {
+                return CheckStatus.Normal;
+            }
+            if (DebrisSize[2] > 0 || DebrisSize[1] > SNL)
+            {
+                return CheckStatus.Error;
+            }
+            if (DebrisSize[1] > 0 && DebrisSize[1] <= SNL)
+            {
+                return CheckStatus.Warning;
+            }
+            return CheckStatus.Normal;
+        }
+
+        private void CloseForm(object sender, FormClosingEventArgs e)
+        {
+            if (_camHelper != null && _camHelper.isRunning())
+            {
+                e.Cancel = true;
+                MessageBox.Show("为了设备安全使用，请先停止检测，再关闭应用程序", "关闭提示", 0, MessageBoxIcon.Information, 0);
+                return;
+            }
+            if (DialogResult.OK == MessageBox.Show("你确定要关闭应用程序吗？", "关闭提示", MessageBoxButtons.OKCancel, MessageBoxIcon.Question))
+            {
+                if (_camHelper != null && _camHelper.isRunning())
+                {
+                    closeCam();
+                }
+                if (_commHelper.IsOpen)
+                {
+                    _commHelper.Close();
+                }
+            }
+            else
+            {
+                e.Cancel = true;
+            }
+        }
+        private void displayHScroll(string msg)
+        {
+            // Make sure no items are displayed partially.
+            listBox1.IntegralHeight = true;
+
+            // Add items that are wide to the ListBox.
+            listBox1.Items.Add(msg);
+
+            // Display a horizontal scroll bar.
+            listBox1.HorizontalScrollbar = true;
+
+            // Create a Graphics object to use when determining the size of the largest item in the ListBox.
+            Graphics g = listBox1.CreateGraphics();
+
+            // Determine the size for HorizontalExtent using the MeasureString method using the last item in the list.
+            int hzSize = (int)g.MeasureString(listBox1.Items[listBox1.Items.Count - 1].ToString(), listBox1.Font).Width;
+            // Set the HorizontalExtent property.
+            listBox1.HorizontalExtent = hzSize;
         }
     }
 }

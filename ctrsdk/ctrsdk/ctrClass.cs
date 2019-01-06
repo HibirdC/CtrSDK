@@ -37,7 +37,7 @@ namespace ctrSdk
         {
             return (int)_latestCmd.type;
         }
-        private string getLatestCmdReturn()
+        public string getLatestCmdReturn()
         {
             string cmd = "";
             switch (_latestCmd.type)
@@ -652,5 +652,76 @@ namespace ctrSdk
             return ret;
         }
         #endregion
+
+        public string getCmdReturn(int type)
+        {
+            string result = "";
+            switch ((cmd_Type)type)
+            {
+                case cmd_Type.boardSelfCheck:
+                    result = CMDComm.CMD_SELFCHECK_RETURN;
+                    break;
+                case cmd_Type.B_setSpeed:
+                    result = CMDComm.CMD_BENGSPEED_RETURN;
+                    break;
+                case cmd_Type.B_start:
+                    result = CMDComm.CMD_STARTBENG_RETURN;
+                    break;
+                case cmd_Type.B_LED1:
+                    result = CMDComm.CMD_START_POINTLIGHT_RETURN;
+                    break;
+                case cmd_Type.B_LED1_s://再次开启反射光源后，停磁
+                    result = CMDComm.CMD_START_POINTLIGHT_RETURN;
+                    break;
+                case cmd_Type.B_LED2: //透射灯开启，执行透射等准备时间
+                    result = CMDComm.CMD_START_AREALIGHT_RETURN;
+                    break;
+                case cmd_Type.JC_Start:
+                    result = CMDComm.CMD_PWM_ADD_RETURN;
+                    break;
+                case cmd_Type.B_stop:
+                    result = CMDComm.CMD_STOPBENG_RETURN;
+                    break;
+                case cmd_Type.JC_Stop:
+                    result = CMDComm.CMD_PWM_STOP_RETURN;
+                    break;
+                case cmd_Type.JC_Des:
+                    result = CMDComm.CMD_PWM_DEL_RETURN;
+                    break;
+                case cmd_Type.B_LED1_stop: //反射灯关闭，开启投射灯
+                    result = CMDComm.CMD_STOP_POINTLIGHT_RETURN;
+                    break;
+                case cmd_Type.B_LED2_stop://透射灯关闭，开启反射灯
+                    result = CMDComm.CMD_STOP_AREALIGHT_RETURN;
+                    break;
+                case cmd_Type.B_start_s:
+                    result = CMDComm.CMD_STARTBENG_RETURN;
+                    break;
+                case cmd_Type.B_stop_s:
+                    result = CMDComm.CMD_STOPBENG_RETURN;
+                    break;
+                case cmd_Type.GREEN_Keep:
+                    result = CMDComm.CMD_GREENLIGHT_KEEP_RETURN;
+                    break;
+                case cmd_Type.GREEN_NoKeep:
+                    result = CMDComm.CMD_GREENLIGHT_NOKEEP_RETURN;
+                    break;
+                case cmd_Type.GREEN_Close:
+                    result = CMDComm.CMD_GREENLIGHT_CLOSE_RETURN;
+                    break;
+                case cmd_Type.RED_Keep:
+                    result = CMDComm.CMD_REDLIGHT_KEEP_RETURN;
+                    break;
+                case cmd_Type.RED_NoKeep:
+                    result = CMDComm.CMD_REDLIGHT_NOKEEP_RETURN;
+                    break;
+                case cmd_Type.RED_Close:
+                    result = CMDComm.CMD_REDLIGHT_CLOSE_RETURN;
+                    break;
+                default:
+                    break;
+            }
+            return result;
+        }
     }
 }

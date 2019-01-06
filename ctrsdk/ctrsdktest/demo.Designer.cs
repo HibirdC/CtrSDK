@@ -92,9 +92,13 @@
             this.toolStripStatusLabel6 = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabel4 = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabel2 = new System.Windows.Forms.ToolStripStatusLabel();
-            this.toolStripProgressBar1 = new System.Windows.Forms.ToolStripProgressBar();
             this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             this.serialPort1 = new System.IO.Ports.SerialPort(this.components);
+            this.label11 = new System.Windows.Forms.Label();
+            this.label12 = new System.Windows.Forms.Label();
+            this.groupBox6 = new System.Windows.Forms.GroupBox();
+            this.label13_result = new System.Windows.Forms.Label();
+            this.label15_Result = new System.Windows.Forms.Label();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox5.SuspendLayout();
@@ -102,6 +106,7 @@
             this.groupBox3.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             this.statusStrip1.SuspendLayout();
+            this.groupBox6.SuspendLayout();
             this.SuspendLayout();
             // 
             // button2
@@ -139,6 +144,7 @@
             // listBox1
             // 
             this.listBox1.FormattingEnabled = true;
+            this.listBox1.HorizontalScrollbar = true;
             this.listBox1.ItemHeight = 12;
             this.listBox1.Location = new System.Drawing.Point(12, 70);
             this.listBox1.Name = "listBox1";
@@ -787,7 +793,7 @@
             this.button1.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button1.Font = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.button1.ForeColor = System.Drawing.SystemColors.ButtonFace;
-            this.button1.Location = new System.Drawing.Point(641, 358);
+            this.button1.Location = new System.Drawing.Point(628, 318);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(98, 23);
             this.button1.TabIndex = 65;
@@ -810,7 +816,7 @@
             this.button33.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.button33.Font = new System.Drawing.Font("宋体", 9F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(134)));
             this.button33.ForeColor = System.Drawing.SystemColors.ButtonFace;
-            this.button33.Location = new System.Drawing.Point(763, 358);
+            this.button33.Location = new System.Drawing.Point(748, 318);
             this.button33.Name = "button33";
             this.button33.Size = new System.Drawing.Size(98, 23);
             this.button33.TabIndex = 66;
@@ -821,7 +827,7 @@
             // label7
             // 
             this.label7.AutoSize = true;
-            this.label7.Location = new System.Drawing.Point(626, 266);
+            this.label7.Location = new System.Drawing.Point(626, 281);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(53, 12);
             this.label7.TabIndex = 68;
@@ -831,14 +837,14 @@
             // 
             this.comboBox2.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.comboBox2.FormattingEnabled = true;
-            this.comboBox2.Location = new System.Drawing.Point(685, 263);
+            this.comboBox2.Location = new System.Drawing.Point(685, 278);
             this.comboBox2.Name = "comboBox2";
             this.comboBox2.Size = new System.Drawing.Size(98, 20);
             this.comboBox2.TabIndex = 67;
             // 
             // button34
             // 
-            this.button34.Location = new System.Drawing.Point(789, 261);
+            this.button34.Location = new System.Drawing.Point(789, 276);
             this.button34.Name = "button34";
             this.button34.Size = new System.Drawing.Size(57, 23);
             this.button34.TabIndex = 6;
@@ -853,8 +859,7 @@
             this.toolStripStatusLabel1,
             this.toolStripStatusLabel6,
             this.toolStripStatusLabel4,
-            this.toolStripStatusLabel2,
-            this.toolStripProgressBar1});
+            this.toolStripStatusLabel2});
             this.statusStrip1.Location = new System.Drawing.Point(0, 471);
             this.statusStrip1.Name = "statusStrip1";
             this.statusStrip1.Padding = new System.Windows.Forms.Padding(1, 0, 16, 0);
@@ -889,24 +894,66 @@
             // toolStripStatusLabel2
             // 
             this.toolStripStatusLabel2.Name = "toolStripStatusLabel2";
-            this.toolStripStatusLabel2.Size = new System.Drawing.Size(84, 18);
+            this.toolStripStatusLabel2.Size = new System.Drawing.Size(203, 18);
             this.toolStripStatusLabel2.Spring = true;
-            // 
-            // toolStripProgressBar1
-            // 
-            this.toolStripProgressBar1.Maximum = 1000000;
-            this.toolStripProgressBar1.Name = "toolStripProgressBar1";
-            this.toolStripProgressBar1.Size = new System.Drawing.Size(117, 17);
             // 
             // backgroundWorker1
             // 
             this.backgroundWorker1.WorkerReportsProgress = true;
+            // 
+            // label11
+            // 
+            this.label11.AutoSize = true;
+            this.label11.Location = new System.Drawing.Point(622, 363);
+            this.label11.Name = "label11";
+            this.label11.Size = new System.Drawing.Size(173, 12);
+            this.label11.TabIndex = 70;
+            this.label11.Text = "默认参数：KS:15,AS:70,SNL:40";
+            // 
+            // label12
+            // 
+            this.label12.AutoSize = true;
+            this.label12.Location = new System.Drawing.Point(682, 380);
+            this.label12.Name = "label12";
+            this.label12.Size = new System.Drawing.Size(107, 12);
+            this.label12.TabIndex = 71;
+            this.label12.Text = "P1:40,P2:120,T:10";
+            // 
+            // groupBox6
+            // 
+            this.groupBox6.Controls.Add(this.label15_Result);
+            this.groupBox6.Controls.Add(this.label13_result);
+            this.groupBox6.Location = new System.Drawing.Point(611, 347);
+            this.groupBox6.Name = "groupBox6";
+            this.groupBox6.Size = new System.Drawing.Size(250, 121);
+            this.groupBox6.TabIndex = 72;
+            this.groupBox6.TabStop = false;
+            // 
+            // label13_result
+            // 
+            this.label13_result.AutoSize = true;
+            this.label13_result.Location = new System.Drawing.Point(11, 53);
+            this.label13_result.MaximumSize = new System.Drawing.Size(230, 0);
+            this.label13_result.Name = "label13_result";
+            this.label13_result.Size = new System.Drawing.Size(65, 12);
+            this.label13_result.TabIndex = 73;
+            this.label13_result.Text = "测试结果：";
+            // 
+            // label15_Result
+            // 
+            this.label15_Result.AutoSize = true;
+            this.label15_Result.Location = new System.Drawing.Point(73, 61);
+            this.label15_Result.Name = "label15_Result";
+            this.label15_Result.Size = new System.Drawing.Size(0, 12);
+            this.label15_Result.TabIndex = 74;
             // 
             // demo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(870, 494);
+            this.Controls.Add(this.label12);
+            this.Controls.Add(this.label11);
             this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.button34);
             this.Controls.Add(this.label7);
@@ -916,9 +963,12 @@
             this.Controls.Add(this.pictureBox1);
             this.Controls.Add(this.groupBox2);
             this.Controls.Add(this.groupBox1);
+            this.Controls.Add(this.groupBox6);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Fixed3D;
             this.Name = "demo";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "控制板测试demo";
+            this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.CloseForm);
             this.groupBox1.ResumeLayout(false);
             this.groupBox2.ResumeLayout(false);
             this.groupBox5.ResumeLayout(false);
@@ -930,6 +980,8 @@
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
+            this.groupBox6.ResumeLayout(false);
+            this.groupBox6.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -999,9 +1051,13 @@
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel6;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel4;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel2;
-        private System.Windows.Forms.ToolStripProgressBar toolStripProgressBar1;
         private System.ComponentModel.BackgroundWorker backgroundWorker1;
         private System.IO.Ports.SerialPort serialPort1;
+        private System.Windows.Forms.Label label11;
+        private System.Windows.Forms.Label label12;
+        private System.Windows.Forms.GroupBox groupBox6;
+        private System.Windows.Forms.Label label13_result;
+        private System.Windows.Forms.Label label15_Result;
     }
 }
 
